@@ -1,0 +1,82 @@
+Manual vs. Automated JS Analysis
+A. Manual JavaScript Analysis
+Automation is fast, but the human eye catches what machines miss.
+When I started, I relied on manual inspection — opening DevTools, scanning JS files line by line. Here’s what worked:
+Key Tools:
+
+    Browser DevTools (Chrome/Firefox) — Press F12 and check the Sources tab.
+    Burp Suite — Intercept JS files in transit.
+    Regex Search — Hunt for keywords like:
+
+api_key
+aws_secret
+password
+token
+Pro Tip:
+Use regex patterns to find hidden secrets. Example:
+
+grep -E "api[_-]?key|token|secret|password" file.js
+
+Why manual checks matter:
+
+    You’ll spot hardcoded credentials that regex might miss.
+    You’ll understand application logic (e.g., how auth tokens are handled).
+
+B. Automated Recon
+Machines do the grunt work — so you can focus on exploitation.
+Once I had a baseline understanding, I automated the process. Here’s my favorite toolchain:
+Step 1: Extract JavaScript Files
+Using GAU (Get All URLs) and Waybackurls:
+
+cat targets.txt | gau | grep ".js$" | httpx -mc 200 > js_files.txt
+
+This fetches all live JS files from a target domain.
+Step 2: Scan for Secrets
+I used Nuclei and JSFScan.sh (by KathanP19):
+
+cat js_files.txt | nuclei -t secrets -o js_secrets.txt
+
+Why automation wins:
+
+    Processes thousands of files in minutes.
+    Catches low-hanging fruit (API keys, tokens).
+
+How I Found 127 Bugs
+Step 1: Gathering JavaScript Files
+I ran subjs on 50+ domains:
+
+subjs -l domains.txt -o all_js_files.txt
+
+Result: Over 2,000+ JS files collected.
+Step 2: Running Automated Scans
+I used Mantra, a JS analysis tool:
+
+cat all_js_files.txt | mantra -o vulnerabilities.json
+
+Findings:
+
+    19 exposed API keys (AWS, Stripe, Firebase).
+    43 debug endpoints left open.
+
+Step 3: Manual Deep Dive
+Automation flagged potential issues, but manual review confirmed them.
+What I found:
+
+    Hardcoded admin credentials in a React.js file.
+    JWT tokens are stored in localStorage without encryption.
+    Database connection strings in a minified Angular script.
+
+Total vulnerabilities confirmed: 127 (mix of high, medium, and low risk).
+Pro Tips for Bug Hunters
+1. Use a “Secret Finder” Script
+I wrote a Python script to detect JWTs, OAuth tokens, and AWS keys:
+
+import re  
+with open("file.js", "r") as f:  
+    if re.search("(eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,})", f.read()):  
+        print("JWT Token Found!")
+
+2. Avoid False Positives
+Not every “api_key” is real. Verify with:
+
+httpx -l keys.txt -status-code -title
